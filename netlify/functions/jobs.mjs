@@ -18,7 +18,7 @@ const ASIA = [
 ];
 const ASIA_RE = new RegExp("\\b(" + ASIA.join("|") + ")\\b", "i");
 
-const EUROPE = /(europe|\beu\b|emea|united kingdom|\buk\b|england|scotland|ireland|germany|deutschland|france|spain|portugal|italy|netherlands|belgium|luxembourg|switzerland|austria|poland|czech|slovakia|hungary|romania|bulgaria|greece|croatia|serbia|slovenia|bosnia|albania|macedonia|montenegro|moldova|ukraine|lithuania|latvia|estonia|finland|sweden|norway|denmark|iceland|cyprus|malta|london|berlin|munich|münchen|hamburg|frankfurt|köln|cologne|stuttgart|düsseldorf|paris|madrid|barcelona|lisbon|amsterdam|rotterdam|brussels|zurich|zürich|vienna|wien|warsaw|krakow|prague|budapest|bucharest|stockholm|oslo|copenhagen|helsinki|dublin|manchester|edinburgh|milan|rome)/i;
+const EUROPE = /(europe|nederland|schweiz|suisse|svizzera|österreich|osterreich|españa|belgië|belgique|polska|sverige|norge|danmark|suomi|italia|česko|holland|utrecht|zuid-holland|noord-holland|eindhoven|den haag|luzern|bern|basel|geneva|genève|\beu\b|emea|united kingdom|\buk\b|england|scotland|ireland|germany|deutschland|france|spain|portugal|italy|netherlands|belgium|luxembourg|switzerland|austria|poland|czech|slovakia|hungary|romania|bulgaria|greece|croatia|serbia|slovenia|bosnia|albania|macedonia|montenegro|moldova|ukraine|lithuania|latvia|estonia|finland|sweden|norway|denmark|iceland|cyprus|malta|london|berlin|munich|münchen|hamburg|frankfurt|köln|cologne|stuttgart|düsseldorf|paris|madrid|barcelona|lisbon|amsterdam|rotterdam|brussels|zurich|zürich|vienna|wien|warsaw|krakow|prague|budapest|bucharest|stockholm|oslo|copenhagen|helsinki|dublin|manchester|edinburgh|milan|rome)/i;
 const USA_WORDS = /(\busa\b|u\.s\.|united states|america|new york|california|texas|florida|chicago|seattle|boston|atlanta|denver|austin|dallas|houston|san francisco|los angeles|phoenix)/i;
 const USA = /(\bUS\b|\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b|new york|california|texas|florida|chicago|seattle|boston|atlanta|denver|austin|dallas|houston|san francisco|los angeles|phoenix)/;
 const ANYWHERE = /(worldwide|anywhere|global|remote$|^remote\b|^$)/i;
@@ -50,7 +50,7 @@ const sources = {
     return (d.jobs || []).map((j) => ({
       title: j.title, company: j.company_name, location: j.candidate_required_location,
       url: j.url, date: j.publication_date, type: j.job_type, salary: j.salary,
-      tags: (j.tags || []).join(" "), source: "Remotive", kind: "Job"
+      tags: (j.tags || []).join(" ") + " " + strip(j.description).slice(0, 4000), source: "Remotive", kind: "Job"
     }));
   },
   async arbeitnow() {
@@ -60,7 +60,7 @@ const sources = {
       for (const j of d.data || []) out.push({
         title: j.title, company: j.company_name, location: j.location + (j.remote ? " (Remote)" : ""),
         url: j.url, date: new Date(j.created_at * 1000).toISOString(), type: (j.job_types || []).join(", "),
-        tags: (j.tags || []).join(" "), source: "Arbeitnow", kind: "Job"
+        tags: (j.tags || []).join(" ") + " " + strip(j.description).slice(0, 4000), source: "Arbeitnow", kind: "Job"
       });
     }
     return out;
@@ -80,7 +80,7 @@ const sources = {
       title: j.jobTitle, company: j.companyName, location: j.jobGeo,
       url: j.url, date: j.pubDate, type: (j.jobType || []).join?.(", ") || j.jobType,
       salary: j.annualSalaryMin ? `${j.annualSalaryMin} - ${j.annualSalaryMax} ${j.salaryCurrency || ""}` : "",
-      tags: strip(j.jobExcerpt), source: "Jobicy", kind: "Job"
+      tags: strip(j.jobExcerpt) + " " + strip(j.jobDescription).slice(0, 4000), source: "Jobicy", kind: "Job"
     }));
   },
   async adzuna() {
@@ -138,7 +138,7 @@ export default async () => {
   const seen = new Set();
   const jobs = all
     .filter((j) => j.title && j.url)
-    .filter((j) => DOTNET.test(j.title) || (j.source !== "Arbeitnow" && DOTNET.test(j.tags || "")))
+    .filter((j) => DOTNET.test(j.title) || DOTNET.test(j.tags || ""))
     .filter((j) => !ASIA_RE.test(j.location || ""))
     .map((j) => ({ ...j, title: strip(j.title), region: region(j.location), tags: undefined }))
     .filter((j) => { const k = (j.title + "|" + j.company).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
