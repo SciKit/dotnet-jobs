@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>.NET Jobs – USA, Europe & more</title>
+<style>
+  :root { --bg:#f6f7fb; --card:#fff; --ink:#1c1f2b; --muted:#6b7080; --line:#e4e6ee; --brand:#512bd4; --soft:#efeafd; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--brand); color:#fff; padding:22px 16px 18px; }
+  header h1 { margin:0 auto; max-width:960px; font-size:22px; }
+  header p { margin:6px auto 0; max-width:960px; opacity:.85; font-size:14px; }
+  .wrap { max-width:960px; margin:0 auto; padding:14px 16px 40px; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  .bar input, .bar select { padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:15px; background:#fff; }
+  .bar input { flex:1 1 220px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .chip { border:1px solid var(--line); background:#fff; padding:7px 12px; border-radius:20px; font-size:14px; cursor:pointer; }
+  .chip.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:10px; }
+  .job { display:block; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:10px; text-decoration:none; color:inherit; }
+  .job:hover { border-color:var(--brand); }
+  .job h3 { margin:0 0 4px; font-size:16px; }
+  .row { display:flex; flex-wrap:wrap; gap:6px 12px; color:var(--muted); font-size:13px; }
+  .tag { background:var(--soft); color:var(--brand); padding:2px 8px; border-radius:6px; font-size:12px; font-weight:600; }
+  .tag.fl { background:#e6f6ec; color:#14823d; }
+  .empty { text-align:center; color:var(--muted); padding:40px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>.NET Developer Jobs</h1>
+  <p>USA, Europe and other regions. Asia is filtered out. Jobs + Upwork freelance posts.</p>
+</header>
+<div class="wrap">
+  <div class="bar">
+    <input id="q" placeholder="Search title or company (e.g. Blazor, Azure, senior)">
+    <select id="kind"><option value="">Jobs + Freelance</option><option>Job</option><option>Freelance</option></select>
+    <select id="age"><option value="">Any date</option><option value="1">Last 24 hours</option><option value="3">Last 3 days</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+  </div>
+  <div class="chips" id="regions"></div>
+  <div class="meta" id="meta">Loading jobs…</div>
+  <div id="list"></div>
+</div>
+<script>
+const REGIONS = ["All", "USA", "Europe", "Worldwide", "Other"];
+let jobs = [], reg = "All";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s || "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+function ago(d) {
+  const h = (Date.now() - new Date(d)) / 36e5;
+  if (isNaN(h)) return "";
+  if (h < 1) return "just now"; if (h < 24) return Math.floor(h) + "h ago";
+  return Math.floor(h / 24) + "d ago";
+}
+function chips() {
+  $("regions").innerHTML = REGIONS.map((r) => {
+    const n = r === "All" ? jobs.length : jobs.filter((j) => j.region === r).length;
+    return `<button class="chip ${r === reg ? "on" : ""}" data-r="${r}">${r} (${n})</button>`;
+  }).join("");
+  document.querySelectorAll(".chip").forEach((b) => b.onclick = () => { reg = b.dataset.r; chips(); draw(); });
+}
+function draw() {
+  const q = $("q").value.toLowerCase().trim(), k = $("kind").value, age = +$("age").value;
+  const list = jobs.filter((j) =>
+    (reg === "All" || j.region === reg) && (!k || j.kind === k) &&
+    (!age || Date.now() - new Date(j.date) < age * 864e5) &&
+    (!q || (j.title + " " + j.company + " " + j.location).toLowerCase().includes(q)));
+  $("list").innerHTML = list.length ? list.map((j) => `
+    <a class="job" href="${esc(j.url)}" target="_blank" rel="noopener">
+      <h3>${esc(j.title)}</h3>
+      <div class="row">
+        <span class="tag ${j.kind === "Freelance" ? "fl" : ""}">${esc(j.source)}</span>
+        <span>${esc(j.company)}</span><span>📍 ${esc(j.location || "Remote")}</span>
+        ${j.salary ? `<span>💰 ${esc(j.salary)}</span>` : ""}<span>${ago(j.date)}</span>
+      </div>
+    </a>`).join("") : `<div class="empty">No jobs match.</div>`;
+  $("meta").textContent = `${list.length} jobs shown`;
+}
+fetch("/api/jobs").then((r) => r.json()).then((d) => {
+  jobs = d.jobs || []; chips(); draw();
+  $("meta").title = JSON.stringify(d.status);
+}).catch(() => $("meta").textContent = "Could not load jobs. Try again later.");
+["q", "kind", "age"].forEach((id) => $(id).addEventListener("input", draw));
+</script>
+</body>
+</html>
