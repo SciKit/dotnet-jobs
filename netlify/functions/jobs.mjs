@@ -4,6 +4,8 @@
 
 const DOTNET = /(\.net\b|dotnet|asp\s?\.?net|c#|csharp|blazor|\bmaui\b|xamarin|entity framework|\bef core\b|\bwpf\b|\bwinforms\b|umbraco|sitecore)/i;
 
+const DOTNET_G = new RegExp(DOTNET.source, "gi");
+
 const ASIA = [
   "asia", "apac", "india", "china", "japan", "korea", "singapore", "malaysia", "indonesia",
   "philippines", "thailand", "vietnam", "pakistan", "bangladesh", "sri lanka", "nepal",
@@ -138,7 +140,7 @@ export default async () => {
   const seen = new Set();
   const jobs = all
     .filter((j) => j.title && j.url)
-    .filter((j) => DOTNET.test(j.title) || DOTNET.test(j.tags || ""))
+    .filter((j) => DOTNET.test(j.title) || ((j.tags || "").match(DOTNET_G) || []).length >= 3)
     .filter((j) => !ASIA_RE.test(j.location || ""))
     .map((j) => ({ ...j, title: strip(j.title), region: region(j.location), tags: undefined }))
     .filter((j) => { const k = (j.title + "|" + j.company).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
