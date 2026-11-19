@@ -38,7 +38,7 @@ const strip = (s) => (s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").tri
 
 async function getJSON(url, opts = {}) {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 9000);
+  const t = setTimeout(() => ctrl.abort(), 8000);
   try {
     const r = await fetch(url, { ...opts, signal: ctrl.signal, headers: { "User-Agent": "dotnet-jobs-board/1.0", ...(opts.headers || {}) } });
     if (!r.ok) throw new Error(url + " -> " + r.status);
@@ -57,9 +57,10 @@ const sources = {
   },
   async arbeitnow() {
     const out = [];
-    for (let p = 1; p <= 3; p++) {
-      const d = await getJSON("https://www.arbeitnow.com/api/job-board-api?page=" + p);
-      for (const j of d.data || []) out.push({
+    const pages = await Promise.allSettled([1,2,3,4,5,6,7,8,9,10].map((p) => getJSON("https://www.arbeitnow.com/api/job-board-api?page=" + p)));
+    for (const pr of pages) {
+      if (pr.status !== "fulfilled") continue;
+      for (const j of pr.value.data || []) out.push({
         title: j.title, company: j.company_name, location: j.location + (j.remote ? " (Remote)" : ""),
         url: j.url, date: new Date(j.created_at * 1000).toISOString(), type: (j.job_types || []).join(", "),
         tags: (j.tags || []).join(" ") + " " + strip(j.description).slice(0, 4000), source: "Arbeitnow", kind: "Job"
@@ -85,18 +86,39 @@ const sources = {
       tags: strip(j.jobExcerpt) + " " + strip(j.jobDescription).slice(0, 4000), source: "Jobicy", kind: "Job"
     }));
   },
+  async himalayas() {
+    const pages = await Promise.allSettled([0, 100, 200, 300, 400].map((o) => getJSON("https://himalayas.app/jobs/api?limit=100&offset=" + o)));
+    return pages.flatMap((pr) => pr.status !== "fulfilled" ? [] : (pr.value.jobs || []).map((j) => ({
+      title: j.title, company: j.companyName,
+      location: (j.locationRestrictions || []).join(", ") || "Worldwide",
+      url: j.applicationLink || j.guid, date: j.pubDate ? new Date(j.pubDate * 1000).toISOString() : "",
+      salary: j.minSalary ? `${j.minSalary} - ${j.maxSalary} ${j.currency || ""}` : "",
+      tags: (j.categories || []).join(" ") + " " + strip(j.excerpt) + " " + strip(j.description).slice(0, 4000),
+      source: "Himalayas", kind: "Job"
+    })));
+  },
+  async themuse() {
+    const pages = await Promise.allSettled([0,1,2,3,4,5,6,7,8,9].map((p) => getJSON("https://www.themuse.com/api/public/jobs?category=Software%20Engineering&page=" + p)));
+    return pages.flatMap((pr) => pr.status !== "fulfilled" ? [] : (pr.value.results || []).map((j) => ({
+      title: j.name, company: j.company?.name,
+      location: (j.locations || []).map((l) => l.name).join("; ") || "Remote",
+      url: j.refs?.landing_page, date: j.publication_date,
+      tags: strip(j.contents).slice(0, 6000), source: "The Muse", kind: "Job"
+    })));
+  },
   async adzuna() {
     const id = process.env.ADZUNA_APP_ID, key = process.env.ADZUNA_APP_KEY;
     if (!id || !key) return [];
     const NAMES = { us:"USA", gb:"United Kingdom", de:"Germany", fr:"France", nl:"Netherlands", pl:"Poland", it:"Italy", es:"Spain", at:"Austria", be:"Belgium", ch:"Switzerland", ca:"Canada", au:"Australia", nz:"New Zealand", br:"Brazil", mx:"Mexico", za:"South Africa" };
     const countries = ["us", "gb", "de", "fr", "nl", "pl", "it", "es", "at", "be", "ch", "ca", "au", "nz", "br", "mx", "za"];
-    const res = await Promise.allSettled(countries.map((c) =>
-      getJSON(`https://api.adzuna.com/v1/api/jobs/${c}/search/1?app_id=${id}&app_key=${key}&results_per_page=50&what=.net%20developer&max_days_old=30&content-type=application/json`)
+    const reqs = countries.flatMap((c) => [1, 2].map((pg) => [c, pg]));
+    const res = await Promise.allSettled(reqs.map(([c, pg]) =>
+      getJSON(`https://api.adzuna.com/v1/api/jobs/${c}/search/${pg}?app_id=${id}&app_key=${key}&results_per_page=50&what_or=.net%20dotnet%20c%23%20asp.net%20blazor&max_days_old=30&content-type=application/json`)
         .then((d) => (d.results || []).map((j) => ({
           title: strip(j.title), company: j.company?.display_name, location: (j.location?.display_name || "") + ", " + NAMES[c],
           url: j.redirect_url, date: j.created, type: j.contract_time,
           salary: j.salary_min ? `${Math.round(j.salary_min)} - ${Math.round(j.salary_max)}` : "",
-          tags: "", source: "Adzuna", kind: "Job"
+          tags: strip(j.description), trusted: true, source: "Adzuna", kind: "Job"
         })))
     ));
     return res.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
@@ -140,9 +162,9 @@ export default async () => {
   const seen = new Set();
   const jobs = all
     .filter((j) => j.title && j.url)
-    .filter((j) => DOTNET.test(j.title) || ((j.tags || "").match(DOTNET_G) || []).length >= 3)
+    .filter((j) => DOTNET.test(j.title) || (j.trusted && DOTNET.test(j.tags || "")) || ((j.tags || "").match(DOTNET_G) || []).length >= 3)
     .filter((j) => !ASIA_RE.test(j.location || ""))
-    .map((j) => ({ ...j, title: strip(j.title), region: region(j.location), tags: undefined }))
+    .map((j) => ({ ...j, title: strip(j.title), region: region(j.location), tags: undefined, trusted: undefined }))
     .filter((j) => { const k = (j.title + "|" + j.company).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
